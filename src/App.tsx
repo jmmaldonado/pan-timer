@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
+  Wheat,
+  Hand,
+  Croissant,
   Timer, 
   Settings, 
   BookOpen, 
@@ -230,7 +233,7 @@ export default function App() {
       <header className="bg-white/80 backdrop-blur-md border-b border-stone-200 px-4 py-3 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2" onClick={() => setView('home')}>
           <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center text-white shadow-lg shadow-orange-200">
-            <Timer size={20} />
+            <Croissant size={20} />
           </div>
           <h1 className="font-bold text-lg tracking-tight">Panificadora<span className="text-orange-500">Pro</span></h1>
         </div>
@@ -414,9 +417,14 @@ export default function App() {
                       <span className="animate-pulse">●</span>
                       {progress.currentStep?.name || "Finalizado"}
                     </div>
-                    <p className="text-[10px] text-stone-400 font-mono">
-                      Transcurrido: {formatTime(progress.elapsedMins)}
-                    </p>
+                    <div className="flex flex-col items-center">
+                      <p className="text-[10px] text-stone-400 font-mono">
+                        Paso: {formatTime((progress.currentStep?.duration || 0) - progress.timeInStep)} restante
+                      </p>
+                      <p className="text-[10px] text-stone-400 font-mono">
+                        Transcurrido: {formatTime(progress.elapsedMins)}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -452,14 +460,16 @@ export default function App() {
                         : "bg-white border-stone-100"
                     )}>
                       <div className="flex items-center gap-2 mb-1">
-                        <Plus size={16} />
+                        <Wheat size={16} />
                         <span className="text-xs font-bold uppercase">Añadir</span>
                       </div>
                       <p className="text-lg font-mono font-bold">
                         {progress.elapsedMins > progress.addTime ? `+${formatTime(progress.elapsedMins - progress.addTime)}` : formatTime(progress.addTime - progress.elapsedMins)}
                       </p>
                       <p className="text-[10px] opacity-70">
-                        {progress.elapsedMins > progress.addTime ? "Tiempo pasado" : "Faltan"}
+                        {progress.elapsedMins > progress.addTime 
+                          ? "Tiempo pasado" 
+                          : new Date((state.startTime || 0) + progress.addTime * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
                     </div>
                   )}
@@ -472,14 +482,16 @@ export default function App() {
                         : "bg-white border-stone-100"
                     )}>
                       <div className="flex items-center gap-2 mb-1">
-                        <Trash2 size={16} />
+                        <Hand size={16} />
                         <span className="text-xs font-bold uppercase">Palas</span>
                       </div>
                       <p className="text-lg font-mono font-bold">
                         {progress.elapsedMins > progress.rmvTime ? `+${formatTime(progress.elapsedMins - progress.rmvTime)}` : formatTime(progress.rmvTime - progress.elapsedMins)}
                       </p>
                       <p className="text-[10px] opacity-70">
-                        {progress.elapsedMins > progress.rmvTime ? "Tiempo pasado" : "Faltan"}
+                        {progress.elapsedMins > progress.rmvTime 
+                          ? "Tiempo pasado" 
+                          : new Date((state.startTime || 0) + progress.rmvTime * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
                     </div>
                   )}
