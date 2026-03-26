@@ -403,15 +403,20 @@ export default function App() {
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
-                className="space-y-8"
+                className="space-y-6"
               >
-                <div className="text-center space-y-2">
+                <div className="text-center space-y-3">
                   <p className="text-stone-400 font-medium uppercase tracking-widest text-xs">
                     {programs.find(p => p.id === state.programId)?.name} • {state.weight}g
                   </p>
-                  <h2 className="text-6xl font-mono font-bold tracking-tighter">
-                    {formatTime(progress.totalMins - progress.elapsedMins)}
-                  </h2>
+                  <div className="flex flex-col items-center gap-2">
+                    <h2 className="text-6xl font-mono font-bold tracking-tighter">
+                      {formatTime(progress.totalMins - progress.elapsedMins)}
+                    </h2>
+                    <p className="text-[10px] text-stone-400 font-mono">
+                      Fin proceso: {new Date((state.startTime || 0) + progress.totalMins * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Transcurrido: {formatTime(progress.elapsedMins)}
+                    </p>
+                  </div>
                   <div className="flex flex-col items-center gap-1">
                     <div className="flex items-center justify-center gap-2 text-orange-500 font-medium">
                       <span className="animate-pulse">●</span>
@@ -419,10 +424,7 @@ export default function App() {
                     </div>
                     <div className="flex flex-col items-center">
                       <p className="text-[10px] text-stone-400 font-mono">
-                        Paso: {formatTime((progress.currentStep?.duration || 0) - progress.timeInStep)} restante
-                      </p>
-                      <p className="text-[10px] text-stone-400 font-mono">
-                        Transcurrido: {formatTime(progress.elapsedMins)}
+                        Fin paso: {new Date(Date.now() + ((progress.currentStep?.duration || 0) - progress.timeInStep) * 60000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} • Paso: {formatTime((progress.currentStep?.duration || 0) - progress.timeInStep)} 
                       </p>
                     </div>
                   </div>
