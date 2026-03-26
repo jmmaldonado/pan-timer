@@ -320,19 +320,63 @@ export default function App() {
                       />
                       <div className="flex justify-between items-center px-1">
                         <p className="text-[10px] text-stone-400">Inicia en {selectedDelay}h</p>
-                        {(() => {
-                          const program = programs.find(p => p.id === selectedProgramId);
-                          const duration = program?.timings[selectedWeight]?.total || 0;
-                          if (duration === 0) return null;
-                          const finishTime = new Date(Date.now() + (selectedDelay * 60 + duration) * 60000);
-                          return (
-                            <p className="text-[10px] font-bold text-stone-500">
-                              Duración: {formatDuration(duration)} • Finaliza: {finishTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </p>
-                          );
-                        })()}
                       </div>
                     </div>
+
+                    {(() => {
+                      const program = programs.find(p => p.id === selectedProgramId);
+                      const duration = program?.timings[selectedWeight]?.total || 0;
+                      if (duration === 0) return null;
+                      const finishTime = new Date(Date.now() + (selectedDelay * 60 + duration) * 60000);
+                      
+                      const getMilestoneTime = (property: 'isAdd' | 'isRmv') => {
+                        if (!program) return null;
+                        const steps = program.timings[selectedWeight]?.steps || [];
+                        let elapsed = 0;
+                        for (const s of steps) {
+                          elapsed += s.duration;
+                          if ((s as any)[property]) {
+                            const time = new Date(Date.now() + (selectedDelay * 60 + elapsed) * 60000);
+                            return time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+                          }
+                        }
+                        return null;
+                      };
+
+                      const addTime = getMilestoneTime('isAdd');
+                      const removeTime = getMilestoneTime('isRmv');
+
+                      return (
+                        <div className="bg-stone-50 p-3 rounded-xl space-y-2 border border-stone-100">
+                          <div className="flex justify-between items-center">
+                            <p className="text-[10px] font-bold text-stone-500 uppercase tracking-wider">Resumen del Proceso</p>
+                            <p className="text-[10px] font-bold text-orange-600">
+                              Fin: {finishTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <p className="text-xs font-medium text-stone-600">Duración total</p>
+                            <p className="text-xs font-bold text-stone-900">{formatDuration(duration)}</p>
+                          </div>
+                          {(addTime || removeTime) && (
+                            <div className="pt-2 border-t border-stone-200/50 flex flex-col gap-1.5">
+                              {addTime && (
+                                <div className="flex justify-between items-center">
+                                  <p className="text-[10px] text-stone-500">Añadir ingredientes</p>
+                                  <p className="text-[10px] font-bold text-orange-500">{addTime}</p>
+                                </div>
+                              )}
+                              {removeTime && (
+                                <div className="flex justify-between items-center">
+                                  <p className="text-[10px] text-stone-500">Quitar palas</p>
+                                  <p className="text-[10px] font-bold text-stone-700">{removeTime}</p>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     <button 
                       onClick={() => {
@@ -533,32 +577,24 @@ export default function App() {
                     <button onClick={() => setView('add-recipe')} className="mt-4 text-orange-500 font-bold text-sm">Crear mi primera receta</button>
                   </div>
                 ) : (
-                  <div className="grid gap-4">
-                    {recipes.map(recipe => (
-                      <div key={recipe.id} className="bg-white p-4 rounded-2xl shadow-sm border border-stone-100 space-y-3">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <h3 className="font-bold text-lg">{recipe.name}</h3>
-                            <p className="text-xs text-stone-500">{programs.find(p => p.id === recipe.programId)?.name} • {recipe.weight}g</p>
-                          </div>
-                          <div className="flex gap-2">
+                    <div className="grid gap-4">
+                      {recipes.map(recipe => (
+                        <div 
+                          key={recipe.id} 
+                          className="bg-white p-4 rounded-2xl shadow-sm border border-stone-100 space-y-3 cursor-pointer active:scale-[0.98] transition-all"
+                          onClick={() => {
+                            setEditingRecipe(recipe);
+                            setView('add-recipe');
+                          }}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h3 className="font-bold text-lg">{recipe.name}</h3>
+                              <p className="text-xs text-stone-500">{programs.find(p => p.id === recipe.programId)?.name} • {recipe.weight}g</p>
+                            </div>
                             <button 
-                              onClick={() => {
-                                setEditingRecipe(recipe);
-                                setView('add-recipe');
-                              }}
-                              className="w-8 h-8 bg-stone-100 rounded-full flex items-center justify-center text-stone-500"
-                            >
-                              <Settings size={14} />
-                            </button>
-                            <button 
-                              onClick={() => setModal({ type: 'delete-recipe', data: recipe.id })}
-                              className="w-8 h-8 bg-red-50 rounded-full flex items-center justify-center text-red-500"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                            <button 
-                              onClick={() => {
+                              onClick={(e) => {
+                                e.stopPropagation();
                                 setSelectedProgramId(recipe.programId);
                                 setSelectedWeight(recipe.weight);
                                 setView('home');
@@ -569,15 +605,14 @@ export default function App() {
                               <Play size={18} fill="currentColor" />
                             </button>
                           </div>
+                          <div className="flex gap-4 text-[10px] font-bold uppercase text-stone-400 border-t border-stone-50 pt-3">
+                            <span>Hidratación: <span className="text-orange-500">{calculateHydration(recipe).toFixed(1)}%</span></span>
+                            <span>Harina: {(Object.values(recipe.flours || {}) as (number | undefined)[]).reduce<number>((a, b) => a + (b || 0), 0)}g</span>
+                            <span>Agua: {recipe.water}ml</span>
+                          </div>
                         </div>
-                        <div className="flex gap-4 text-[10px] font-bold uppercase text-stone-400 border-t border-stone-50 pt-3">
-                          <span>Hidratación: <span className="text-orange-500">{calculateHydration(recipe).toFixed(1)}%</span></span>
-                          <span>Harina: {(Object.values(recipe.flours || {}) as (number | undefined)[]).reduce<number>((a, b) => a + (b || 0), 0)}g</span>
-                          <span>Agua: {recipe.water}ml</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                      ))}
+                    </div>
                 )}
               </motion.div>
             )}
@@ -827,9 +862,26 @@ export default function App() {
                       <textarea name="otherIngredients" rows={2} defaultValue={editingRecipe?.otherIngredients} className="w-full bg-stone-50 border-none rounded-xl p-3 text-sm" />
                     </div>
                   </div>
-                  <button type="submit" className="w-full bg-orange-500 text-white py-4 rounded-2xl font-bold shadow-lg shadow-orange-200">
-                    {editingRecipe ? 'Actualizar Receta' : 'Guardar Receta'}
-                  </button>
+                  <div className="flex flex-col gap-3">
+                    <button type="submit" className="w-full bg-orange-500 text-white py-4 rounded-2xl font-bold shadow-lg shadow-orange-200">
+                      {editingRecipe ? 'Actualizar Receta' : 'Guardar Receta'}
+                    </button>
+                    {editingRecipe && (
+                      <button 
+                        type="button"
+                        onClick={() => {
+                          setModal({
+                            type: 'delete-recipe',
+                            data: editingRecipe.id
+                          });
+                        }}
+                        className="w-full bg-red-50 text-red-600 py-4 rounded-2xl font-bold flex items-center justify-center gap-2"
+                      >
+                        <Trash2 size={20} />
+                        Eliminar Receta
+                      </button>
+                    )}
+                  </div>
                 </form>
               </motion.div>
             )}
@@ -887,6 +939,8 @@ export default function App() {
         onConfirm={() => {
           if (modal?.data) {
             setRecipes(recipes.filter(r => r.id !== modal.data));
+            setEditingRecipe(null);
+            if (view === 'add-recipe') setView('recipes');
             addToast("Receta eliminada", "success");
           }
         }}
