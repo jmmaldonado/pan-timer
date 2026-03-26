@@ -1,0 +1,5 @@
+{
+  "name": "Panificadora Pro",
+  "description": "Controlador de tiempos para panificadora Silvercrest SBB 850 E1 con avisos de ingredientes y palas.",
+  "requestFramePermissions": ["notifications"]
+}
