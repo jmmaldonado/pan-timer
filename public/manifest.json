@@ -5,7 +5,8 @@
     {
       "src": "./pantimerLogo256.png",
       "type": "image/png",
-      "sizes": "256x256"
+      "sizes": "256x256",
+      "purpose": "any"
     }
   ],
   "start_url": ".",
