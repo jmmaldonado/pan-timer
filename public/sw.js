@@ -1,9 +1,9 @@
 const CACHE_NAME = 'panpro-v1';
 const ASSETS = [
-  '/',
-  '/index.html',
-  '/manifest.json',
-  '/pantimerLogo256.png'
+  './',
+  './index.html',
+  './manifest.json',
+  './pantimerLogo256.png'
 ];
 
 self.addEventListener('install', (event) => {
