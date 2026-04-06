@@ -19,10 +19,13 @@ import {
   AlertTriangle,
   CheckCircle2,
   X,
-  AlertCircle
+  AlertCircle,
+  Snowflake,
+  Sun
 } from 'lucide-react';
 import { DEFAULT_PROGRAMS, BreadWeight, UserRecipe, Program, FlourType } from './types';
 import { useTimer } from './hooks/useTimer';
+import { useFermentationTimer, FermentationTemp } from './hooks/useFermentationTimer';
 import { cn } from './lib/utils';
 
 // --- UI Components ---
@@ -97,7 +100,7 @@ interface Toast {
 }
 
 export default function App() {
-  const [view, setView] = useState<'home' | 'timer' | 'recipes' | 'admin' | 'add-recipe' | 'edit-program'>('home');
+  const [view, setView] = useState<'home' | 'timer' | 'recipes' | 'admin' | 'add-recipe' | 'edit-program' | 'fermentation'>('home');
   const [programs, setPrograms] = useState<Program[]>(() => {
     const saved = localStorage.getItem('panificadora_programs');
     if (!saved) return DEFAULT_PROGRAMS;
@@ -125,12 +128,25 @@ export default function App() {
   });
 
   const { state, start, stop, progress } = useTimer(programs);
+  const { fermentationState, startFermentation, stopFermentation, fermentationProgress } = useFermentationTimer();
+  
   const [selectedProgramId, setSelectedProgramId] = useState(1);
   const [selectedWeight, setSelectedWeight] = useState<BreadWeight>(1000);
   const [selectedDelay, setSelectedDelay] = useState(0);
   const [editingProgram, setEditingProgram] = useState<Program | null>(null);
   const [editingRecipe, setEditingRecipe] = useState<UserRecipe | null>(null);
   const [stepsOpen, setStepsOpen] = useState(false);
+
+  // Fermentation custom state
+  const [customDuration, setCustomDuration] = useState(1);
+  const [customTemp, setCustomTemp] = useState<FermentationTemp>('Ambient');
+
+  const FERMENTATION_PRESETS = [
+    { label: '1h', duration: 60, temp: 'Ambient' as FermentationTemp },
+    { label: '4h', duration: 240, temp: 'Ambient' as FermentationTemp },
+    { label: '12h', duration: 720, temp: 'Fridge' as FermentationTemp },
+    { label: '24h', duration: 1440, temp: 'Fridge' as FermentationTemp },
+  ];
 
   // Modal & Toast state
   const [modal, setModal] = useState<{ type: 'stop' | 'delete-recipe' | 'import-success' | 'import-error', data?: any } | null>(null);
@@ -569,6 +585,135 @@ export default function App() {
               </motion.div>
             )}
 
+            {view === 'fermentation' && (
+              <motion.div 
+                key="fermentation"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="space-y-6"
+              >
+
+                {fermentationProgress ? (
+                  <div className="bg-white rounded-3xl p-8 shadow-xl border border-stone-100 text-center space-y-6">
+                    <div className="space-y-2">
+                      <p className={cn(
+                        "text-xs font-bold uppercase tracking-widest",
+                        fermentationProgress.isExpired ? "text-red-500 animate-pulse" : "text-stone-400"
+                      )}>
+                        {fermentationProgress.isExpired ? "¡Tiempo Agotado!" : "Fermentando..."}
+                      </p>
+                      <h3 className={cn(
+                        "text-6xl font-mono font-bold tracking-tighter",
+                        fermentationProgress.isExpired ? "text-red-600" : "text-stone-800"
+                      )}>
+                        {formatTime(fermentationProgress.remainingMins)}
+                      </h3>
+                      <p className="text-sm text-stone-500 font-medium">
+                        {fermentationProgress.isExpired ? "Tiempo de más" : "Tiempo restante"}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-center gap-4">
+                      <div className="flex items-center gap-2 bg-stone-50 px-4 py-2 rounded-full border border-stone-100">
+                        {fermentationProgress.tempType === 'Fridge' ? <Snowflake size={16} className="text-blue-500" /> : <Sun size={16} className="text-orange-500" />}
+                        <span className="text-xs font-bold text-stone-600">
+                          {fermentationProgress.tempType === 'Fridge' ? 'Nevera' : 'Ambiente'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2 bg-stone-50 px-4 py-2 rounded-full border border-stone-100">
+                        <Timer size={16} className="text-stone-400" />
+                        <span className="text-xs font-bold text-stone-600">Objetivo: {Math.floor(fermentationProgress.durationMins / 60)}h</span>
+                      </div>
+                    </div>
+
+                    <button 
+                      onClick={stopFermentation}
+                      className="w-full bg-red-50 text-red-600 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-red-100 transition-colors"
+                    >
+                      <Square size={20} fill="currentColor" />
+                      Cancelar Temporizador
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 md:grid-cols-2 gap-4">
+                      {FERMENTATION_PRESETS.map((preset, idx) => (
+                        <button
+                          key={idx}
+                          onClick={() => startFermentation(preset.duration, preset.temp)}
+                          className="bg-white p-3 flex items-center align-middle gap-6 rounded-xl border border-stone-100 shadow-sm hover:shadow-md transition-all text-left group active:scale-95"
+                        >
+                          <div className={cn(
+                            "w-10 h-10 rounded-xl flex items-center justify-center align-middle transition-colors",
+                            preset.temp === 'Fridge' ? "bg-blue-50 text-blue-500 group-hover:bg-blue-100" : "bg-orange-50 text-orange-500 group-hover:bg-orange-100"
+                          )}>
+                            {preset.temp === 'Fridge' ? <Snowflake size={20} /> : <Sun size={20} />}
+                          </div>
+                          <div>
+                            <p className="text-xl font-bold text-stone-800">{preset.label}</p>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
+
+                    <div className="bg-white rounded-3xl p-6 shadow-sm border border-stone-100 space-y-6">
+                      <h3 className="text-sm font-bold text-stone-800 flex items-center gap-2">
+                        <Plus size={18} className="text-orange-500" />
+                        Temporizador Personalizado
+                      </h3>
+                      
+                      <div className="space-y-4">
+                        <div>
+                          <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest block mb-2">Duración (Horas)</label>
+                          <div className="flex items-center gap-4">
+                            <input 
+                              type="range" 
+                              min="1" 
+                              max="72" 
+                              value={customDuration} 
+                              onChange={(e) => setCustomDuration(parseInt(e.target.value))}
+                              className="flex-1 accent-orange-500"
+                            />
+                            <span className="text-xl font-mono font-bold text-stone-800 w-12 text-right">{customDuration}h</span>
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="text-[10px] font-bold text-stone-400 uppercase tracking-widest block mb-2">Temperatura</label>
+                          <div className="flex gap-2">
+                            {(['Ambient', 'Fridge'] as FermentationTemp[]).map(t => (
+                              <button
+                                key={t}
+                                onClick={() => setCustomTemp(t)}
+                                className={cn(
+                                  "flex-1 py-3 rounded-xl text-xs font-bold border transition-all flex items-center justify-center gap-2",
+                                  customTemp === t 
+                                    ? "bg-orange-500 border-orange-500 text-white shadow-lg shadow-orange-100" 
+                                    : "bg-stone-50 border-stone-100 text-stone-500 hover:bg-stone-100"
+                                )}
+                              >
+                                {t === 'Fridge' ? <Snowflake size={14} /> : <Sun size={14} />}
+                                {t === 'Fridge' ? 'Nevera' : 'Ambiente'}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <button 
+                          onClick={() => startFermentation(customDuration * 60, customTemp)}
+                          className="w-full bg-stone-900 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-stone-800 transition-all active:scale-95"
+                        >
+                          <Play size={20} fill="currentColor" />
+                          Iniciar Temporizador
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </motion.div>
+            )}
+
             {view === 'recipes' && (
               <motion.div 
                 key="recipes"
@@ -911,6 +1056,13 @@ export default function App() {
         >
           <Timer size={24} />
           <span className="text-[10px] font-bold uppercase">Inicio</span>
+        </button>
+        <button 
+          onClick={() => setView('fermentation')}
+          className={cn("flex flex-col items-center gap-1 transition-colors", view === 'fermentation' ? "text-orange-500" : "text-stone-400")}
+        >
+          <Croissant size={24} />
+          <span className="text-[10px] font-bold uppercase">Fermentación</span>
         </button>
         <button 
           onClick={() => setView('recipes')}
