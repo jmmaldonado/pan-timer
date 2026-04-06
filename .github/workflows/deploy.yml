@@ -1,4 +1,4 @@
-name: NodeJS with Webpack
+name: Build and deploy to GH Pages
 
 on:
   workflow_dispatch: 
