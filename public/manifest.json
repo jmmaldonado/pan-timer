@@ -3,10 +3,16 @@
   "name": "Panificadora Pro",
   "icons": [
     {
-      "src": "./pantimerLogo256.png",
+      "src": "./pantimerLogo2.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any"
+    },
+    {
+      "src": "./pantimerLogo2.png",
       "type": "image/png",
       "sizes": "256x256",
-      "purpose": "any"
+      "purpose": "maskable"
     }
   ],
   "start_url": ".",

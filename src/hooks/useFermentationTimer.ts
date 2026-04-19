@@ -70,15 +70,15 @@ export function useFermentationTimer() {
           navigator.serviceWorker.ready.then(registration => {
             registration.showNotification(title, {
               body,
-              icon: './pantimerLogo256.png',
+              icon: './pantimerLogo2.png',
               vibrate: [200, 100, 200],
-              badge: './pantimerLogo256.png',
+              badge: './pantimerLogo2.png',
               tag: 'fermentation-notification'
             } as any);
-          });
-        } else {
-          new Notification(title, { body, icon: './pantimerLogo256.png' });
-        }
+        });
+      } else {
+        new Notification(title, { body, icon: './pantimerLogo2.png' });
+      }
       }
       setState(prev => ({ ...prev, notified: true }));
     }

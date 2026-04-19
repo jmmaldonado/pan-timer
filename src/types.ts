@@ -183,3 +183,18 @@ export const DEFAULT_PROGRAMS: Program[] = [
     }
   }
 ];
+
+export interface ManualStep {
+  id: string;
+  name: string;
+  duration: number; // in minutes
+  type: 'fold' | 'shaping' | 'rest';
+}
+
+export interface ManualSequenceState {
+  isActive: boolean;
+  startTime: number | null;
+  currentStepIndex: number;
+  steps: ManualStep[];
+  notifiedSteps: string[];
+}

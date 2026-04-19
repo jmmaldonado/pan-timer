@@ -23,9 +23,10 @@ import {
   Snowflake,
   Sun
 } from 'lucide-react';
-import { DEFAULT_PROGRAMS, BreadWeight, UserRecipe, Program, FlourType } from './types';
+import { DEFAULT_PROGRAMS, BreadWeight, UserRecipe, Program, FlourType, ManualStep, ManualSequenceState } from './types';
 import { useTimer } from './hooks/useTimer';
 import { useFermentationTimer, FermentationTemp } from './hooks/useFermentationTimer';
+import { useManualSequence } from './hooks/useManualSequence';
 import { cn } from './lib/utils';
 
 // --- UI Components ---
@@ -100,7 +101,7 @@ interface Toast {
 }
 
 export default function App() {
-  const [view, setView] = useState<'home' | 'timer' | 'recipes' | 'admin' | 'add-recipe' | 'edit-program' | 'fermentation'>('home');
+  const [view, setView] = useState<'home' | 'timer' | 'recipes' | 'admin' | 'add-recipe' | 'edit-program' | 'fermentation' | 'folds'>('home');
   const [programs, setPrograms] = useState<Program[]>(() => {
     const saved = localStorage.getItem('panificadora_programs');
     if (!saved) return DEFAULT_PROGRAMS;
@@ -129,6 +130,7 @@ export default function App() {
 
   const { state, start, stop, markAsNotified, progress } = useTimer(programs);
   const { fermentationState, startFermentation, stopFermentation, fermentationProgress } = useFermentationTimer();
+  const { manualState, startSequence, stopSequence, nextStep, updateSteps, manualProgress } = useManualSequence();
   
   const [selectedProgramId, setSelectedProgramId] = useState(1);
   const [selectedWeight, setSelectedWeight] = useState<BreadWeight>(1000);
@@ -136,6 +138,17 @@ export default function App() {
   const [editingProgram, setEditingProgram] = useState<Program | null>(null);
   const [editingRecipe, setEditingRecipe] = useState<UserRecipe | null>(null);
   const [stepsOpen, setStepsOpen] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>(
+    typeof Notification !== 'undefined' ? Notification.permission : 'default'
+  );
+  const [useFoldsAfterMasa, setUseFoldsAfterMasa] = useState(() => {
+    const saved = localStorage.getItem('panificadora_use_folds_after_masa');
+    return saved === 'true';
+  });
+
+  useEffect(() => {
+    localStorage.setItem('panificadora_use_folds_after_masa', JSON.stringify(useFoldsAfterMasa));
+  }, [useFoldsAfterMasa]);
 
   // Fermentation custom state
   const [customDuration, setCustomDuration] = useState(1);
@@ -188,11 +201,16 @@ export default function App() {
           }
         }
       } else if (!state.notifiedSteps.includes('finished') && state.isActive) {
-        sendNotification("¡Pan listo!", "El programa de panificación ha finalizado.");
+        sendNotification("¡Masa lista!", "El programa de amasado ha finalizado. Te toca hacer los pliegues.");
         markAsNotified('finished');
+        if (state.programId === 10 && useFoldsAfterMasa) {
+          addToast("Masa terminada. Iniciando secuencia de pliegues...", "success");
+          startSequence();
+          setView('folds');
+        }
       }
     }
-  }, [progress, state.notifiedSteps, state.isActive]);
+  }, [progress, state.notifiedSteps, state.isActive, state.programId, useFoldsAfterMasa]);
 
   const sendNotification = async (title: string, body: string) => {
     if (Notification.permission === 'granted') {
@@ -201,21 +219,34 @@ export default function App() {
           const registration = await navigator.serviceWorker.ready;
           registration.showNotification(title, {
             body,
-            icon: './pantimerLogo256.png',
+            icon: './pantimerLogo2.png',
             vibrate: [200, 100, 200],
-            badge: './pantimerLogo256.png',
+            badge: './pantimerLogo2.png',
             tag: 'panificadora-notification'
           } as any);
         } else {
-          new Notification(title, { body, icon: './pantimerLogo256.png' });
+          new Notification(title, { body, icon: './pantimerLogo2.png' });
         }
       } catch (e) {
         console.error("Error sending notification", e);
         // Fallback
-        new Notification(title, { body, icon: './pantimerLogo256.png' });
+        new Notification(title, { body, icon: './pantimerLogo2.png' });
       }
-    } else if (Notification.permission !== 'denied') {
-      Notification.requestPermission();
+    }
+  };
+
+  const handleRequestPermission = async () => {
+    if (!("Notification" in window)) {
+      addToast("Tu navegador no soporta notificaciones.", "error");
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+    if (permission === 'granted') {
+      addToast("¡Permiso concedido!", "success");
+      sendNotification("¡Notificaciones activas!", "Recibirás avisos de PanPro.");
+    } else {
+      addToast("Has denegado el permiso.", "error");
     }
   };
 
@@ -290,6 +321,51 @@ export default function App() {
                 exit={{ opacity: 0, y: -10 }}
                 className="space-y-6"
               >
+                {notificationPermission !== 'granted' && (
+                  <motion.div 
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    className="bg-orange-50 border border-orange-100 rounded-2xl p-4 flex flex-col gap-3"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="bg-orange-500 text-white p-2 rounded-lg shrink-0">
+                        <Bell size={18} />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-xs font-bold text-orange-900">Activar Notificaciones</p>
+                        <p className="text-[10px] text-orange-700 leading-relaxed">
+                          Es necesario dar permiso para que podamos avisarte cuando termine el proceso o tengas que añadir ingredientes.
+                        </p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={handleRequestPermission}
+                      className="w-full bg-orange-500 text-white py-2 rounded-xl text-xs font-bold shadow-lg shadow-orange-100"
+                    >
+                      Permitir Notificaciones
+                    </button>
+                  </motion.div>
+                )}
+
+                {manualState.isActive && manualProgress && (
+                  <div 
+                    onClick={() => setView('folds')}
+                    className="bg-stone-900 p-4 rounded-2xl text-white shadow-xl flex items-center justify-between cursor-pointer"
+                  >
+                    <div>
+                      <p className="text-xs font-medium opacity-60 uppercase tracking-wider">Técnica en curso</p>
+                      <p className="font-bold text-lg leading-tight">{manualProgress.currentStep.name}</p>
+                      <p className="text-[10px] opacity-60 font-medium">Paso {manualProgress.currentStepIndex + 1} de {manualProgress.totalSteps}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className={cn("text-2xl font-mono font-bold", manualProgress.isExpired && "text-orange-400 animate-pulse")}>
+                        {formatTime(manualProgress.remainingMins)}
+                      </p>
+                      <p className="text-xs opacity-60">{manualProgress.isExpired ? "¡Terminado!" : "restante"}</p>
+                    </div>
+                  </div>
+                )}
+
                 {state.isActive && progress && (
                   <div 
                     onClick={() => setView('timer')}
@@ -423,19 +499,67 @@ export default function App() {
 
                     <button 
                       onClick={() => {
-                        if (Notification.permission === 'default') {
-                          Notification.requestPermission();
+                        if (Notification.permission !== 'granted') {
+                          handleRequestPermission().then(() => {
+                            if (Notification.permission === 'granted') {
+                              start(selectedProgramId, selectedWeight, selectedDelay);
+                              sendNotification("Programa iniciado", `El programa ${programs.find(p => p.id === selectedProgramId)?.name} ha comenzado.`);
+                              setStepsOpen(false);
+                              setView('timer');
+                            }
+                          });
+                        } else {
+                          start(selectedProgramId, selectedWeight, selectedDelay);
+                          sendNotification("Programa iniciado", `El programa ${programs.find(p => p.id === selectedProgramId)?.name} ha comenzado.`);
+                          setStepsOpen(false);
+                          setView('timer');
                         }
-                        start(selectedProgramId, selectedWeight, selectedDelay);
-                        sendNotification("Programa iniciado", `El programa ${programs.find(p => p.id === selectedProgramId)?.name} ha comenzado.`);
-                        setStepsOpen(false);
-                        setView('timer');
                       }}
                       className="w-full bg-stone-900 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-stone-800 active:scale-95 transition-all"
                     >
                       <Play size={20} fill="currentColor" />
                       Iniciar Programa
                     </button>
+
+                    {selectedProgramId === 10 && (
+                      <div className="flex items-center justify-between p-3 bg-stone-50 rounded-xl border border-stone-100">
+                        <div className="flex items-center gap-2">
+                          <Hand size={16} className="text-orange-500" />
+                          <span className="text-xs font-bold text-stone-700">Encadenar Pliegues tras finalizar</span>
+                        </div>
+                        <button 
+                          onClick={() => setUseFoldsAfterMasa(!useFoldsAfterMasa)}
+                          className={cn(
+                            "w-10 h-6 rounded-full transition-colors relative flex items-center px-1",
+                            useFoldsAfterMasa ? "bg-orange-500" : "bg-stone-300"
+                          )}
+                        >
+                          <motion.div 
+                            animate={{ x: useFoldsAfterMasa ? 16 : 0 }}
+                            className="w-4 h-4 bg-white rounded-full shadow-sm"
+                          />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </section>
+
+                <section className="space-y-4">
+                  <h2 className="text-sm font-semibold text-stone-400 uppercase tracking-widest px-1">Técnicas Manuales</h2>
+                  <div 
+                    onClick={() => setView('folds')}
+                    className="bg-white rounded-2xl p-5 shadow-sm border border-stone-100 flex items-center justify-between cursor-pointer group active:scale-95 transition-all"
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="bg-orange-50 p-3 rounded-xl text-orange-500 group-hover:bg-orange-100 transition-colors">
+                        <Hand size={24} />
+                      </div>
+                      <div>
+                        <p className="font-bold text-stone-800">Pliegues y reposos</p>
+                        <p className="text-[10px] text-stone-400 uppercase font-bold tracking-wider">Proceso multi-paso</p>
+                      </div>
+                    </div>
+                    <ChevronRight size={20} className="text-stone-300" />
                   </div>
                 </section>
               </motion.div>
@@ -670,9 +794,17 @@ export default function App() {
                         <button
                           key={idx}
                           onClick={() => {
-                            if (Notification.permission === 'default') Notification.requestPermission();
-                            startFermentation(preset.duration, preset.temp);
-                            sendNotification("Fermentación iniciada", `Temporizador de ${preset.label} activado.`);
+                            if (Notification.permission !== 'granted') {
+                              handleRequestPermission().then(() => {
+                                if (Notification.permission === 'granted') {
+                                  startFermentation(preset.duration, preset.temp);
+                                  sendNotification("Fermentación iniciada", `Temporizador de ${preset.label} activado.`);
+                                }
+                              });
+                            } else {
+                              startFermentation(preset.duration, preset.temp);
+                              sendNotification("Fermentación iniciada", `Temporizador de ${preset.label} activado.`);
+                            }
                           }}
                           className="bg-white p-3 flex items-center align-middle gap-6 rounded-xl border border-stone-100 shadow-sm hover:shadow-md transition-all text-left group active:scale-95"
                         >
@@ -734,9 +866,17 @@ export default function App() {
 
                         <button 
                           onClick={() => {
-                            if (Notification.permission === 'default') Notification.requestPermission();
-                            startFermentation(customDuration * 60, customTemp);
-                            sendNotification("Fermentación iniciada", `Temporizador personalizado de ${customDuration}h activado.`);
+                            if (Notification.permission !== 'granted') {
+                              handleRequestPermission().then(() => {
+                                if (Notification.permission === 'granted') {
+                                  startFermentation(customDuration * 60, customTemp);
+                                  sendNotification("Fermentación iniciada", `Temporizador personalizado de ${customDuration}h activado.`);
+                                }
+                              });
+                            } else {
+                              startFermentation(customDuration * 60, customTemp);
+                              sendNotification("Fermentación iniciada", `Temporizador personalizado de ${customDuration}h activado.`);
+                            }
                           }}
                           className="w-full bg-stone-900 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-stone-800 transition-all active:scale-95"
                         >
@@ -746,6 +886,257 @@ export default function App() {
                       </div>
                     </div>
                   </>
+                )}
+              </motion.div>
+            )}
+
+            {view === 'folds' && (
+              <motion.div 
+                key="folds"
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -20 }}
+                className="space-y-6 pb-20"
+              >
+                {/* Header */}
+                <div className="flex items-center gap-4 mb-2">
+                   <h2 className="text-xl font-bold">Técnicas manuales</h2>
+                </div>
+
+                {manualProgress ? (
+                  // Timer Mode
+                  <div className="space-y-6">
+                    <div className="bg-stone-900 rounded-3xl p-8 shadow-2xl text-center space-y-8 relative overflow-hidden">
+                       {/* Background decoration */}
+                       <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+                          <Hand size={120} className="text-white" />
+                       </div>
+
+                       <div className="space-y-2 relative">
+                         <p className={cn(
+                           "text-[10px] font-bold uppercase tracking-[0.2em]",
+                           manualProgress.isExpired ? "text-orange-400 animate-pulse" : "text-stone-400"
+                         )}>
+                           {manualProgress.isExpired ? "¡Tiempo de actuar!" : "Reposo en curso"}
+                         </p>
+                         <h3 className={cn(
+                           "text-7xl font-mono font-bold tracking-tighter",
+                           manualProgress.isExpired ? "text-orange-400" : "text-white"
+                         )}>
+                           {formatTime(manualProgress.remainingMins)}
+                         </h3>
+                         <p className="text-sm text-stone-400 font-medium">
+                           {manualProgress.isExpired ? "Tiempo de más" : `Restante para: ${manualProgress.currentStep.name}`}
+                         </p>
+                       </div>
+
+                         <div className="space-y-4 relative">
+                          {manualProgress.isExpired ? (
+                             <button 
+                               onClick={nextStep}
+                               className="w-full bg-orange-500 text-white py-5 rounded-3xl font-bold flex flex-col items-center justify-center gap-1 shadow-xl shadow-orange-950/20 active:scale-95 transition-all"
+                             >
+                                <div className="flex items-center gap-2">
+                                   <Hand size={20} />
+                                   <span>Confirmar Acción Realizada</span>
+                                </div>
+                                <span className="text-[10px] opacity-70 font-medium uppercase">Pulsa tras realizar el {manualProgress.currentStep.type === 'fold' ? 'pliegue' : 'enrollado'}</span>
+                             </button>
+                          ) : (
+                             <div className="bg-white/5 border border-white/10 p-4 rounded-2xl flex flex-col items-center gap-2">
+                                <p className="text-[10px] text-stone-500 font-bold uppercase tracking-wider">Reposo en curso...</p>
+                                <div className="flex gap-4">
+                                  <button 
+                                    onClick={nextStep}
+                                    className="text-stone-400 text-[10px] font-bold underline hover:text-white transition-colors"
+                                  >
+                                    Saltar e ir al siguiente
+                                  </button>
+                                </div>
+                             </div>
+                          )}
+                          
+                          {manualProgress.currentStepIndex === manualState.steps.length - 1 && manualProgress.isExpired && (
+                             <motion.button 
+                               initial={{ opacity: 0, y: 10 }}
+                               animate={{ opacity: 1, y: 0 }}
+                               onClick={() => {
+                                  stopSequence();
+                                  setSelectedProgramId(15);
+                                  setSelectedWeight(1000); 
+                                  setView('home');
+                                  addToast("¡Técnica completada! Iniciando horneado...", "success");
+                                  // Auto start bake program? User request said "se pedirá confirmación para lanzar el programa de horneado"
+                               }}
+                               className="w-full bg-stone-100 text-stone-900 py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-white active:scale-95 transition-all mt-4 border-2 border-orange-500"
+                             >
+                               <Play size={20} className="text-orange-500" fill="currentColor" />
+                               Lanzar Programa de Horneado (Prog. 15)
+                             </motion.button>
+                          )}
+
+                          <button 
+                            onClick={stopSequence}
+                            className="w-full text-stone-500 py-2 text-xs font-bold hover:text-white transition-colors"
+                          >
+                            Cancelar técnica
+                          </button>
+                       </div>
+                    </div>
+
+                    <div className="space-y-4">
+                       <p className="text-[10px] font-bold uppercase text-stone-400 tracking-widest px-1">Siguientes Pasos</p>
+                       <div className="space-y-3">
+                          {manualState.steps.slice(manualProgress.currentStepIndex + 1).map((step, idx) => (
+                             <div key={step.id} className="bg-white p-4 rounded-2xl border border-stone-100 flex items-center justify-between opacity-60">
+                                <div className="flex items-center gap-3">
+                                   <div className="w-8 h-8 rounded-full bg-stone-50 text-stone-400 flex items-center justify-center text-xs font-bold">
+                                      {manualProgress.currentStepIndex + idx + 2}
+                                   </div>
+                                   <span className="text-sm font-bold text-stone-700">{step.name}</span>
+                                </div>
+                                <span className="text-xs font-mono text-stone-400">{step.duration} min</span>
+                             </div>
+                          ))}
+                       </div>
+                    </div>
+                  </div>
+                ) : (
+                  // Setup / Config Mode
+                  <div className="space-y-6">
+                    <div className="bg-orange-50 p-5 rounded-2xl border border-orange-100 flex gap-4">
+                      <div className="bg-orange-500 text-white p-3 rounded-xl shrink-0 h-fit">
+                        <Hand size={24} />
+                      </div>
+                      <div className="space-y-1">
+                        <p className="text-sm font-bold text-orange-900">Técnica de Pliegues</p>
+                        <p className="text-xs text-orange-700/80 leading-relaxed">
+                          Configura los pasos de pliegues y reposo que realizas después del amasado.
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-4">
+                       <div className="flex justify-between items-center px-1">
+                          <p className="text-[10px] font-bold uppercase text-stone-400 tracking-widest">Pasos configurados</p>
+                          <button 
+                            onClick={() => {
+                               const newStep: ManualStep = {
+                                  id: `step-${Date.now()}`,
+                                  name: `Paso ${manualState.steps.length + 1}`,
+                                  duration: 60,
+                                  type: 'fold'
+                               };
+                               updateSteps([...manualState.steps, newStep]);
+                            }}
+                            className="text-orange-600 text-[10px] font-bold uppercase flex items-center gap-1"
+                          >
+                            <Plus size={12} />
+                            Añadir Paso
+                          </button>
+                       </div>
+
+                       <div className="space-y-3">
+                          {manualState.steps.map((step, idx) => (
+                             <div key={step.id} className="bg-white p-4 rounded-2xl border border-stone-100 shadow-sm space-y-4">
+                                <div className="flex items-center justify-between">
+                                   <div className="flex items-center gap-3 w-full">
+                                      <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs font-bold font-mono shrink-0">
+                                         {idx + 1}
+                                      </div>
+                                      <input 
+                                        type="text" 
+                                        value={step.name}
+                                        onChange={(e) => {
+                                           const newSteps = [...manualState.steps];
+                                           newSteps[idx].name = e.target.value;
+                                           updateSteps(newSteps);
+                                        }}
+                                        className="bg-transparent border-none p-0 text-sm font-bold text-stone-800 focus:ring-0 w-full"
+                                      />
+                                   </div>
+                                   <button 
+                                      onClick={() => {
+                                         const newSteps = manualState.steps.filter((_, i) => i !== idx);
+                                         updateSteps(newSteps);
+                                      }}
+                                      className="text-stone-300 hover:text-red-500 transition-colors shrink-0"
+                                   >
+                                      <Trash2 size={16} />
+                                   </button>
+                                </div>
+                                <div className="flex items-center gap-4">
+                                   <div className="flex-1 space-y-1">
+                                      <div className="flex justify-between items-center px-1">
+                                         <p className="text-[10px] text-stone-400 font-bold uppercase">Reposo</p>
+                                         <p className="text-sm font-mono font-bold text-orange-600">{step.duration}m</p>
+                                      </div>
+                                      <input 
+                                        type="range" 
+                                        min="5" 
+                                        max="300" 
+                                        step="5"
+                                        value={step.duration}
+                                        onChange={(e) => {
+                                           const newSteps = [...manualState.steps];
+                                           newSteps[idx].duration = parseInt(e.target.value);
+                                           updateSteps(newSteps);
+                                        }}
+                                        className="w-full h-1.5 bg-stone-100 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                                      />
+                                   </div>
+                                   <div className="shrink-0 flex gap-1">
+                                       <button 
+                                         onClick={() => {
+                                            const newSteps = [...manualState.steps];
+                                            newSteps[idx].type = 'fold';
+                                            updateSteps(newSteps);
+                                         }}
+                                         className={cn(
+                                            "w-10 h-10 rounded-lg flex items-center justify-center border transition-all",
+                                            step.type === 'fold' ? "bg-orange-500 border-orange-500 text-white" : "bg-white border-stone-200 text-stone-400"
+                                         )}
+                                       >
+                                          <Hand size={16} />
+                                       </button>
+                                       <button 
+                                         onClick={() => {
+                                            const newSteps = [...manualState.steps];
+                                            newSteps[idx].type = 'shaping';
+                                            updateSteps(newSteps);
+                                         }}
+                                         className={cn(
+                                            "w-10 h-10 rounded-lg flex items-center justify-center border transition-all",
+                                            step.type === 'shaping' ? "bg-stone-900 border-stone-900 text-white" : "bg-white border-stone-200 text-stone-400"
+                                         )}
+                                       >
+                                          <Wheat size={16} />
+                                       </button>
+                                   </div>
+                                </div>
+                             </div>
+                          ))}
+                       </div>
+
+                       <button 
+                         onClick={() => {
+                           if (Notification.permission !== 'granted') {
+                             handleRequestPermission().then(() => {
+                               if (Notification.permission === 'granted') {
+                                 startSequence();
+                               }
+                             });
+                           } else {
+                             startSequence();
+                           }
+                         }}
+                         className="w-full bg-orange-500 text-white py-5 rounded-3xl font-bold flex items-center justify-center gap-3 shadow-xl shadow-orange-100 active:scale-95 transition-all mt-4"
+                       >
+                         <Play size={24} fill="currentColor" />
+                         Iniciar Técnica
+                       </button>
+                    </div>
+                  </div>
                 )}
               </motion.div>
             )}
@@ -828,6 +1219,7 @@ export default function App() {
                     <button 
                       onClick={() => {
                         Notification.requestPermission().then(permission => {
+                          setNotificationPermission(permission);
                           if (permission === 'granted') {
                             addToast("Notificaciones activadas", "success");
                             sendNotification("¡Prueba de Notificación!", "Las notificaciones están funcionando correctamente.");
@@ -1126,6 +1518,13 @@ export default function App() {
           <span className="text-[10px] font-bold uppercase">Fermentación</span>
         </button>
         <button 
+          onClick={() => setView('folds')}
+          className={cn("flex flex-col items-center gap-1 transition-colors", view === 'folds' ? "text-orange-500" : "text-stone-400")}
+        >
+          <Hand size={24} />
+          <span className="text-[10px] font-bold uppercase">Pliegues</span>
+        </button>
+        <button 
           onClick={() => setView('recipes')}
           className={cn("flex flex-col items-center gap-1 transition-colors", ['recipes', 'add-recipe'].includes(view) ? "text-orange-500" : "text-stone-400")}
         >
@@ -1149,9 +1548,11 @@ export default function App() {
         confirmText="Detener"
         confirmVariant="danger"
         onConfirm={() => {
-          stop();
+          if (state.isActive) stop();
+          if (fermentationState.isActive) stopFermentation();
+          if (manualState.isActive) stopSequence();
           setView('home');
-          addToast("Programa detenido", "info");
+          addToast("Proceso detenido", "info");
         }}
       >
         ¿Estás seguro de que quieres detener el programa actual? Se perderá el progreso.
