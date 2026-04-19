@@ -7,17 +7,18 @@ interface TimerState {
   weight: BreadWeight;
   isActive: boolean;
   delayMins: number;
+  notifiedSteps: string[]; // Track notified milestones
 }
 
 export function useTimer(programs: Program[]) {
   const [state, setState] = useState<TimerState>(() => {
     const saved = localStorage.getItem('panificadora_timer_state');
-    if (!saved) return { startTime: null, programId: 1, weight: 1000, isActive: false, delayMins: 0 };
+    if (!saved) return { startTime: null, programId: 1, weight: 1000, isActive: false, delayMins: 0, notifiedSteps: [] };
     try {
       const parsed = JSON.parse(saved);
-      return parsed && typeof parsed === 'object' ? parsed : { startTime: null, programId: 1, weight: 1000, isActive: false, delayMins: 0 };
+      return parsed && typeof parsed === 'object' ? { ...parsed, notifiedSteps: parsed.notifiedSteps || [] } : { startTime: null, programId: 1, weight: 1000, isActive: false, delayMins: 0, notifiedSteps: [] };
     } catch (e) {
-      return { startTime: null, programId: 1, weight: 1000, isActive: false, delayMins: 0 };
+      return { startTime: null, programId: 1, weight: 1000, isActive: false, delayMins: 0, notifiedSteps: [] };
     }
   });
 
@@ -43,12 +44,20 @@ export function useTimer(programs: Program[]) {
       programId,
       weight,
       isActive: true,
-      delayMins: delayHours * 60
+      delayMins: delayHours * 60,
+      notifiedSteps: []
     });
   };
 
   const stop = () => {
-    setState({ startTime: null, programId: 1, weight: 1000, isActive: false, delayMins: 0 });
+    setState({ startTime: null, programId: 1, weight: 1000, isActive: false, delayMins: 0, notifiedSteps: [] });
+  };
+
+  const markAsNotified = (stepKey: string) => {
+    setState(prev => ({
+      ...prev,
+      notifiedSteps: [...prev.notifiedSteps, stepKey]
+    }));
   };
 
   const getProgress = useCallback(() => {
@@ -128,5 +137,5 @@ export function useTimer(programs: Program[]) {
     };
   }, [state, currentTime, programs]);
 
-  return { state, start, stop, progress: getProgress() };
+  return { state, start, stop, markAsNotified, progress: getProgress() };
 }

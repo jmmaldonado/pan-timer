@@ -39,11 +39,6 @@ export function useFermentationTimer() {
   }, [state.isActive]);
 
   const start = (durationMins: number, tempType: FermentationTemp) => {
-    // Request notification permission
-    if ("Notification" in window && Notification.permission === "default") {
-      Notification.requestPermission();
-    }
-
     setState({
       startTime: Date.now(),
       durationMins,
@@ -67,11 +62,23 @@ export function useFermentationTimer() {
 
     // Handle notification
     if (isExpired && !state.notified) {
-      if ("Notification" in window && Notification.permission === "granted") {
-        new Notification("Fermentación Finalizada", {
-          body: `El tiempo de fermentación (${state.durationMins} min) ha terminado.`,
-          icon: './pantimerLogo256.png'
-        });
+      const title = "Fermentación Finalizada";
+      const body = `El tiempo de fermentación (${state.durationMins} min) ha terminado.`;
+      
+      if (Notification.permission === "granted") {
+        if ('serviceWorker' in navigator) {
+          navigator.serviceWorker.ready.then(registration => {
+            registration.showNotification(title, {
+              body,
+              icon: './pantimerLogo256.png',
+              vibrate: [200, 100, 200],
+              badge: './pantimerLogo256.png',
+              tag: 'fermentation-notification'
+            } as any);
+          });
+        } else {
+          new Notification(title, { body, icon: './pantimerLogo256.png' });
+        }
       }
       setState(prev => ({ ...prev, notified: true }));
     }

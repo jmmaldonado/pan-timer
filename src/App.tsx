@@ -127,7 +127,7 @@ export default function App() {
     }
   });
 
-  const { state, start, stop, progress } = useTimer(programs);
+  const { state, start, stop, markAsNotified, progress } = useTimer(programs);
   const { fermentationState, startFermentation, stopFermentation, fermentationProgress } = useFermentationTimer();
   
   const [selectedProgramId, setSelectedProgramId] = useState(1);
@@ -171,25 +171,49 @@ export default function App() {
 
   // Notifications
   useEffect(() => {
-    if (progress && !progress.isFinished) {
-      if (progress.addTime > 0) {
-        const diff = progress.addTime - progress.elapsedMins;
-        if (Math.abs(diff) < 0.1) {
-          sendNotification("¡Añadir ingredientes!", "Es el momento de añadir los extras a tu pan.");
+    if (progress) {
+      if (!progress.isFinished) {
+        if (progress.addTime > 0 && !state.notifiedSteps.includes('add')) {
+          const diff = progress.addTime - progress.elapsedMins;
+          if (diff <= 0) {
+            sendNotification("¡Añadir ingredientes!", "Es el momento de añadir los extras a tu pan.");
+            markAsNotified('add');
+          }
         }
-      }
-      if (progress.rmvTime > 0) {
-        const diff = progress.rmvTime - progress.elapsedMins;
-        if (Math.abs(diff) < 0.1) {
-          sendNotification("¡Retirar palas!", "Retira las palas de amasado ahora para un mejor resultado.");
+        if (progress.rmvTime > 0 && !state.notifiedSteps.includes('rmv')) {
+          const diff = progress.rmvTime - progress.elapsedMins;
+          if (diff <= 0) {
+            sendNotification("¡Retirar palas!", "Retira las palas de amasado ahora para un mejor resultado.");
+            markAsNotified('rmv');
+          }
         }
+      } else if (!state.notifiedSteps.includes('finished') && state.isActive) {
+        sendNotification("¡Pan listo!", "El programa de panificación ha finalizado.");
+        markAsNotified('finished');
       }
     }
-  }, [progress]);
+  }, [progress, state.notifiedSteps, state.isActive]);
 
-  const sendNotification = (title: string, body: string) => {
+  const sendNotification = async (title: string, body: string) => {
     if (Notification.permission === 'granted') {
-      new Notification(title, { body, icon: '/favicon.ico' });
+      try {
+        if ('serviceWorker' in navigator) {
+          const registration = await navigator.serviceWorker.ready;
+          registration.showNotification(title, {
+            body,
+            icon: './pantimerLogo256.png',
+            vibrate: [200, 100, 200],
+            badge: './pantimerLogo256.png',
+            tag: 'panificadora-notification'
+          } as any);
+        } else {
+          new Notification(title, { body, icon: './pantimerLogo256.png' });
+        }
+      } catch (e) {
+        console.error("Error sending notification", e);
+        // Fallback
+        new Notification(title, { body, icon: './pantimerLogo256.png' });
+      }
     } else if (Notification.permission !== 'denied') {
       Notification.requestPermission();
     }
@@ -399,7 +423,11 @@ export default function App() {
 
                     <button 
                       onClick={() => {
+                        if (Notification.permission === 'default') {
+                          Notification.requestPermission();
+                        }
                         start(selectedProgramId, selectedWeight, selectedDelay);
+                        sendNotification("Programa iniciado", `El programa ${programs.find(p => p.id === selectedProgramId)?.name} ha comenzado.`);
                         setStepsOpen(false);
                         setView('timer');
                       }}
@@ -641,7 +669,11 @@ export default function App() {
                       {FERMENTATION_PRESETS.map((preset, idx) => (
                         <button
                           key={idx}
-                          onClick={() => startFermentation(preset.duration, preset.temp)}
+                          onClick={() => {
+                            if (Notification.permission === 'default') Notification.requestPermission();
+                            startFermentation(preset.duration, preset.temp);
+                            sendNotification("Fermentación iniciada", `Temporizador de ${preset.label} activado.`);
+                          }}
                           className="bg-white p-3 flex items-center align-middle gap-6 rounded-xl border border-stone-100 shadow-sm hover:shadow-md transition-all text-left group active:scale-95"
                         >
                           <div className={cn(
@@ -701,7 +733,11 @@ export default function App() {
                         </div>
 
                         <button 
-                          onClick={() => startFermentation(customDuration * 60, customTemp)}
+                          onClick={() => {
+                            if (Notification.permission === 'default') Notification.requestPermission();
+                            startFermentation(customDuration * 60, customTemp);
+                            sendNotification("Fermentación iniciada", `Temporizador personalizado de ${customDuration}h activado.`);
+                          }}
                           className="w-full bg-stone-900 text-white py-4 rounded-2xl font-bold flex items-center justify-center gap-2 hover:bg-stone-800 transition-all active:scale-95"
                         >
                           <Play size={20} fill="currentColor" />
@@ -785,6 +821,31 @@ export default function App() {
                 className="space-y-6"
               >
                 <h2 className="text-xl font-bold">Administración</h2>
+                
+                <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-100 space-y-4">
+                  <h3 className="text-sm font-bold uppercase text-stone-400 tracking-widest">Notificaciones</h3>
+                  <div className="flex flex-col gap-3">
+                    <button 
+                      onClick={() => {
+                        Notification.requestPermission().then(permission => {
+                          if (permission === 'granted') {
+                            addToast("Notificaciones activadas", "success");
+                            sendNotification("¡Prueba de Notificación!", "Las notificaciones están funcionando correctamente.");
+                          } else {
+                            addToast("Permiso denegado", "error");
+                          }
+                        });
+                      }}
+                      className="w-full bg-stone-50 border border-stone-100 py-4 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-stone-100 transition-all"
+                    >
+                      <Bell size={20} className="text-orange-500" />
+                      Activar y Probar Notificaciones
+                    </button>
+                    <p className="text-[10px] text-stone-400 text-center px-4 leading-relaxed">
+                      Para recibir avisos en el móvil, asegúrate de añadir la aplicación a tu pantalla de inicio (PWA) y conceder los permisos necesarios.
+                    </p>
+                  </div>
+                </div>
 
                 <div className="bg-white rounded-2xl p-4 shadow-sm border border-stone-100 space-y-4">
                   <h3 className="text-sm font-bold uppercase text-stone-400 tracking-widest">Datos y Backup</h3>
