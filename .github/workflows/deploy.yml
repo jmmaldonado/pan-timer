@@ -4,7 +4,9 @@
 name: Deploy to GitHub Pages
 
 on:
-  workflow_dispatch: 
+  push:
+    branches:
+      - 'gh-pages'
 
 permissions:
   contents: read
