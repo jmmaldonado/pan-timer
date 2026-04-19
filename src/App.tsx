@@ -21,7 +21,9 @@ import {
   X,
   AlertCircle,
   Snowflake,
-  Sun
+  Sun,
+  History,
+  HelpCircle
 } from 'lucide-react';
 import { DEFAULT_PROGRAMS, BreadWeight, UserRecipe, Program, FlourType, ManualStep, ManualSequenceState } from './types';
 import { useTimer } from './hooks/useTimer';
@@ -162,7 +164,7 @@ export default function App() {
   ];
 
   // Modal & Toast state
-  const [modal, setModal] = useState<{ type: 'stop' | 'delete-recipe' | 'import-success' | 'import-error', data?: any } | null>(null);
+  const [modal, setModal] = useState<{ type: 'stop' | 'delete-recipe' | 'import-success' | 'import-error' | 'help-manual', data?: any } | null>(null);
   const [toasts, setToasts] = useState<Toast[]>([]);
 
   const addToast = (message: string, type: 'success' | 'error' | 'info' = 'info') => {
@@ -899,9 +901,34 @@ export default function App() {
                 className="space-y-6 pb-20"
               >
                 {/* Header */}
-                <div className="flex items-center gap-4 mb-2">
+                <div className="flex items-center justify-between gap-4 mb-2">
                    <h2 className="text-xl font-bold">Técnicas manuales</h2>
+                   <button 
+                    onClick={() => setModal({ type: 'help-manual' })}
+                    className="p-2 text-stone-400 hover:text-orange-500 transition-colors"
+                   >
+                    <HelpCircle size={20} />
+                   </button>
                 </div>
+
+                {manualProgress && (
+                  <motion.div 
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="bg-stone-50 p-4 rounded-2xl border border-stone-100 flex items-center justify-between"
+                  >
+                    <div className="flex items-center gap-3">
+                       <div className="w-10 h-10 rounded-full bg-stone-200 flex items-center justify-center text-stone-600">
+                          <History size={18} />
+                       </div>
+                       <div>
+                          <p className="text-[10px] font-bold text-stone-400 uppercase tracking-widest">Tiempo total</p>
+                          <p className="text-xs font-bold text-stone-600 uppercase tracking-wider">Transcurrido</p>
+                       </div>
+                    </div>
+                    <span className="text-xl font-mono font-bold text-stone-900">{formatTime(manualProgress.totalElapsedMins)}</span>
+                  </motion.div>
+                )}
 
                 {manualProgress ? (
                   // Timer Mode
@@ -940,7 +967,7 @@ export default function App() {
                                    <Hand size={20} />
                                    <span>Confirmar Acción Realizada</span>
                                 </div>
-                                <span className="text-[10px] opacity-70 font-medium uppercase">Pulsa tras realizar el {manualProgress.currentStep.type === 'fold' ? 'pliegue' : 'enrollado'}</span>
+                                 <span className="text-[10px] opacity-70 font-medium uppercase">Pulsa tras realizar el paso actual</span>
                              </button>
                           ) : (
                              <div className="bg-white/5 border border-white/10 p-4 rounded-2xl flex flex-col items-center gap-2">
@@ -1024,8 +1051,7 @@ export default function App() {
                                const newStep: ManualStep = {
                                   id: `step-${Date.now()}`,
                                   name: `Paso ${manualState.steps.length + 1}`,
-                                  duration: 60,
-                                  type: 'fold'
+                                  duration: 60
                                };
                                updateSteps([...manualState.steps, newStep]);
                             }}
@@ -1063,9 +1089,9 @@ export default function App() {
                                       className="text-stone-300 hover:text-red-500 transition-colors shrink-0"
                                    >
                                       <Trash2 size={16} />
-                                   </button>
-                                </div>
-                                <div className="flex items-center gap-4">
+                                    </button>
+                                 </div>
+                                 <div className="flex items-center gap-4">
                                    <div className="flex-1 space-y-1">
                                       <div className="flex justify-between items-center px-1">
                                          <p className="text-[10px] text-stone-400 font-bold uppercase">Reposo</p>
@@ -1084,34 +1110,6 @@ export default function App() {
                                         }}
                                         className="w-full h-1.5 bg-stone-100 rounded-lg appearance-none cursor-pointer accent-orange-500"
                                       />
-                                   </div>
-                                   <div className="shrink-0 flex gap-1">
-                                       <button 
-                                         onClick={() => {
-                                            const newSteps = [...manualState.steps];
-                                            newSteps[idx].type = 'fold';
-                                            updateSteps(newSteps);
-                                         }}
-                                         className={cn(
-                                            "w-10 h-10 rounded-lg flex items-center justify-center border transition-all",
-                                            step.type === 'fold' ? "bg-orange-500 border-orange-500 text-white" : "bg-white border-stone-200 text-stone-400"
-                                         )}
-                                       >
-                                          <Hand size={16} />
-                                       </button>
-                                       <button 
-                                         onClick={() => {
-                                            const newSteps = [...manualState.steps];
-                                            newSteps[idx].type = 'shaping';
-                                            updateSteps(newSteps);
-                                         }}
-                                         className={cn(
-                                            "w-10 h-10 rounded-lg flex items-center justify-center border transition-all",
-                                            step.type === 'shaping' ? "bg-stone-900 border-stone-900 text-white" : "bg-white border-stone-200 text-stone-400"
-                                         )}
-                                       >
-                                          <Wheat size={16} />
-                                       </button>
                                    </div>
                                 </div>
                              </div>
@@ -1576,7 +1574,46 @@ export default function App() {
         ¿Estás seguro de que quieres eliminar esta receta? Esta acción no se puede deshacer.
       </Modal>
 
-      {/* Toasts */}
+      <Modal
+        isOpen={modal?.type === 'help-manual'}
+        onClose={() => setModal(null)}
+        title="¿Cómo funcionan las Técnicas manuales?"
+      >
+        <div className="space-y-4 py-2">
+          <div className="flex gap-3">
+             <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+                <Settings size={16} />
+             </div>
+             <p className="text-xs text-stone-600 leading-relaxed">
+               <strong>Configura tus pasos:</strong> Define los pliegues y tiempos de reposo que necesites después del amasado.
+             </p>
+          </div>
+          <div className="flex gap-3">
+             <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+                <Bell size={16} />
+             </div>
+             <p className="text-xs text-stone-600 leading-relaxed">
+               <strong>Temporizador inteligente:</strong> La app te avisará cuando termine cada reposo. El tiempo seguirá contando en positivo hasta que confirmes.
+             </p>
+          </div>
+          <div className="flex gap-3">
+             <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+                <Hand size={16} />
+             </div>
+             <p className="text-xs text-stone-600 leading-relaxed">
+               <strong>Confirmación manual:</strong> Realiza el pliegue o enrollado y pulsa "Confirmar" para que empiece el siguiente tiempo de reposo.
+             </p>
+          </div>
+          <div className="flex gap-3">
+             <div className="w-8 h-8 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center shrink-0">
+                <Play size={16} />
+             </div>
+             <p className="text-xs text-stone-600 leading-relaxed">
+               <strong>Horneado final:</strong> Al terminar todos los pasos, tendrás acceso directo al programa de horneado (Prog. 15).
+             </p>
+          </div>
+        </div>
+      </Modal>
       <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[100] flex flex-col gap-2 w-full max-w-xs px-4">
         <AnimatePresence>
           {toasts.map(toast => (

@@ -2,9 +2,9 @@ import { useState, useEffect, useCallback } from 'react';
 import { ManualSequenceState, ManualStep } from '../types';
 
 const INITIAL_STEPS: ManualStep[] = [
-  { id: 'fold-1', name: 'Primer Pliegue y Reposo', duration: 60, type: 'fold' },
-  { id: 'fold-2', name: 'Segundo Pliegue y Reposo', duration: 60, type: 'fold' },
-  { id: 'final-shaping', name: 'Enrollado de Fuerza y Reposo Final', duration: 180, type: 'shaping' },
+  { id: 'fold-1', name: 'Primer Pliegue y Reposo', duration: 60 },
+  { id: 'fold-2', name: 'Segundo Pliegue y Reposo', duration: 60 },
+  { id: 'final-shaping', name: 'Enrollado de Fuerza y Reposo Final', duration: 180 },
 ];
 
 export function useManualSequence() {
@@ -13,6 +13,7 @@ export function useManualSequence() {
     if (!saved) return { 
       isActive: false, 
       startTime: null, 
+      sequenceStartTime: null,
       currentStepIndex: 0, 
       steps: INITIAL_STEPS,
       notifiedSteps: [] 
@@ -22,12 +23,14 @@ export function useManualSequence() {
       return {
         ...parsed,
         steps: parsed.steps || INITIAL_STEPS,
-        notifiedSteps: parsed.notifiedSteps || []
+        notifiedSteps: parsed.notifiedSteps || [],
+        sequenceStartTime: parsed.sequenceStartTime || parsed.startTime
       };
     } catch {
       return { 
         isActive: false, 
         startTime: null, 
+        sequenceStartTime: null,
         currentStepIndex: 0, 
         steps: INITIAL_STEPS,
         notifiedSteps: [] 
@@ -52,10 +55,12 @@ export function useManualSequence() {
   }, [state.isActive]);
 
   const startSequence = () => {
+    const now = Date.now();
     setState(prev => ({
       ...prev,
       isActive: true,
-      startTime: Date.now(),
+      startTime: now,
+      sequenceStartTime: now,
       currentStepIndex: 0,
       notifiedSteps: []
     }));
@@ -66,6 +71,7 @@ export function useManualSequence() {
       ...prev,
       isActive: false,
       startTime: null,
+      sequenceStartTime: null,
       currentStepIndex: 0,
       notifiedSteps: []
     }));
@@ -79,6 +85,7 @@ export function useManualSequence() {
           ...prev,
           isActive: false,
           startTime: null,
+          sequenceStartTime: null,
           currentStepIndex: 0,
           notifiedSteps: []
         };
@@ -96,20 +103,25 @@ export function useManualSequence() {
   };
 
   const getProgress = useCallback(() => {
-    if (!state.isActive || state.startTime === null) return null;
+    if (!state.isActive || state.startTime === null || state.sequenceStartTime === null) return null;
 
     const currentStep = state.steps[state.currentStepIndex];
     if (!currentStep) return null;
 
     const elapsedMs = currentTime - state.startTime;
     const elapsedMins = elapsedMs / (1000 * 60);
+    
+    const totalElapsedMs = currentTime - state.sequenceStartTime;
+    const totalElapsedMins = totalElapsedMs / (1000 * 60);
+
     const durationMins = currentStep.duration;
     const remainingMins = durationMins - elapsedMins;
     const isExpired = remainingMins <= 0;
 
     // Handle notification
     if (isExpired && !state.notifiedSteps.includes(currentStep.id)) {
-      const title = currentStep.type === 'fold' ? "¡Hora de plegar!" : "¡Hora de hornear!";
+      const isLast = state.currentStepIndex === state.steps.length - 1;
+      const title = isLast ? "¡Hora de hornear!" : "¡Hora de plegar!";
       const body = `El tiempo de reposo para "${currentStep.name}" ha finalizado. Realiza la acción y confirma en la app.`;
       
       if (Notification.permission === "granted") {
@@ -136,7 +148,8 @@ export function useManualSequence() {
       remainingMins: Math.abs(remainingMins),
       isExpired,
       currentStepIndex: state.currentStepIndex,
-      totalSteps: state.steps.length
+      totalSteps: state.steps.length,
+      totalElapsedMins
     };
   }, [state, currentTime]);
 
